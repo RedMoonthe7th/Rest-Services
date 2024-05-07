@@ -1,4 +1,5 @@
 const express = require('express');
+const Ajv = require("ajv")
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const TOKEN_SECRET = process.env.TOKEN_SECRET;
@@ -18,7 +19,18 @@ app.use((req, res, next) => {
     })
 });
 app.use(express.urlencoded({ extended: true }))
-
+const ajv = new Ajv() // options can be passed, e.g. {allErrors: true}
+const schema = {
+  type: "object",
+  properties: {
+    id: {type: "integer"},
+    title: { type: "string" },
+    completed: { type: "integer" },
+  },
+  required: ["title", "completed"],
+    additionalProperties:false
+}
+const validate = ajv.compile(schema)
 
 // Create an async pool object with promisified methods 
 const pool = mysql.createPool({
@@ -54,6 +66,7 @@ async function checkConnection() {
 
 // Call the function to check the connection 
 checkConnection();
+// Get Function
 app.get('/todos', async function (req, res) {
     try {
         const sql = "SELECT * FROM todos";
@@ -82,18 +95,82 @@ app.get('/todos', async function (req, res) {
     }
     return;
 });
-// Continue working here
+// Post Function
 app.post('/todos', async function (req, res) {
+    let todo = req.body;
+
+    const isValid = validate(todo)
+    if (!isValid) {
+        console.log(validate.errors);
+        res.send("Invalid data")
+        return;
+    }
+
     try {
-        const sql = "SELECT * FROM todos";
-        var todos = await query(sql);
-        console.log(todos);
-        
+        const sql = "INSERT INTO todos (title,completed) VALUES (?,?)";
+        var todos = await query(sql, [todo.title, todo.completed]);
+        //console.log(todos);
+        res.send("Data saved")
+        return;
+
     } catch (err) {
+        console.log(err);
         res.status(500).send({
             status: 500,
             message: err
         });
+        res.send("Fehler...");
+        return;
+    }
+    return;
+});
+// Put Function
+app.put('/todos', async function (req, res) {
+    let todo = req.body;
+
+    const isValid = validate(todo)
+    if (!isValid) {
+        console.log(validate.errors);
+        res.send("Invalid data")
+        return;
+    }
+    
+    try {
+        const sql = "UPDATE todos SET completed =? WHERE id = ?";
+        var todos = await query(sql, [todo.completed, todo.id]);
+
+        console.log(sql);
+        console.log("id:", todo.id, " completed:",todo.completed);
+        res.send("Data updated")
+        return;
+
+    } catch (err) {
+        console.log(err);
+        res.status(500).send({
+            status: 500,
+            message: err
+        });
+        res.send("Fehler...");
+        return;
+    }
+    return;
+});
+// Delete Function
+app.delete('/todos/:id', async function (req, res) {
+    try {
+        const sql = "DELETE FROM todos WHERE id =?";
+        var todos = await query(sql, [parseInt(req.params.id)]);
+        res.send("Data deleted")
+        return;
+
+    } catch (err) {
+        console.log(err);
+        res.status(500).send({
+            status: 500,
+            message: err
+        });
+        res.send("Fehler...");
+        return;
     }
     return;
 });
